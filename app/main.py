@@ -5,6 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.router import api_router
 from app.core.config import get_settings
+from app.database.base import check_database_connection, close_database_connection
 
 settings = get_settings()
 
@@ -12,7 +13,11 @@ settings = get_settings()
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     """Manage resources that should start and stop with the application."""
-    yield
+    await check_database_connection()
+    try:
+        yield
+    finally:
+        await close_database_connection()
 
 
 app = FastAPI(
