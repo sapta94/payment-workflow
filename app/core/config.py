@@ -9,7 +9,7 @@ class Settings(BaseSettings):
     app_name: str = "Payment Workflow API"
     environment: str = "development"
     debug: bool = False
-    api_v1_prefix: str = "/api/v1"
+    api_v1_prefix: str = "/api"
     cors_origins: str = ""
     database_url: str
 
