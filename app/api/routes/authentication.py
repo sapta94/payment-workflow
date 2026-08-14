@@ -1,10 +1,12 @@
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.security import OAuth2PasswordRequestForm
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.security import create_access_token
 from app.database.base import get_db
 from app.database.models import User
 from app.utils.utils import hash_password, verify_password
@@ -31,11 +33,11 @@ class RegisterUserResponse(BaseModel):
     email_id: str
     message: str
 
-class LoginUserRequest(BaseModel):
-    """Body required to login to a user account."""
+class TokenResponse(BaseModel):
+    """OAuth2 bearer token returned after successful authentication."""
 
-    email_id: Annotated[str, Field(max_length=50)]
-    password: Annotated[str, Field(min_length=8, max_length=128)]
+    access_token: str
+    token_type: str = "bearer"
 
 
 @router.post(
@@ -79,31 +81,32 @@ async def register_user(
 
 @router.post(
     "/login",
-    response_model=RegisterUserResponse,
+    response_model=TokenResponse,
     status_code=status.HTTP_200_OK,
 )
 async def login_user(
-    user_data: LoginUserRequest,
+    form_data: Annotated[OAuth2PasswordRequestForm, Depends()],
     db: Annotated[AsyncSession, Depends(get_db)],
-) -> RegisterUserResponse:
-    existing_user = await db.scalar(select(User).where(User.email_id == user_data.email_id))
+) -> TokenResponse:
+    """Authenticate an email/password pair and issue an OAuth2 bearer token."""
+    existing_user = await db.scalar(select(User).where(User.email_id == form_data.username))
     if existing_user is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="User Credentials Mismatch. Please verify your email or password.",
+            detail="Incorrect email or password.",
+            headers={"WWW-Authenticate": "Bearer"},
         )
     allow_user = verify_password(
-        password=user_data.password,
+        password=form_data.password,
         hashed_password=existing_user.hashed_password,
     )
     if not allow_user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="User Credentials Mismatch. Please verify your email or password.",
+            detail="Incorrect email or password.",
+            headers={"WWW-Authenticate": "Bearer"},
         )
 
-    return RegisterUserResponse(
-        user_id=existing_user.user_id,
-        email_id=existing_user.email_id,
-        message="User logged in successfully.",
+    return TokenResponse(
+        access_token=create_access_token(subject=form_data.username),
     )
