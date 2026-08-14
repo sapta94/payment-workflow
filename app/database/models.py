@@ -10,7 +10,7 @@ class User(Base):
     __tablename__ = "user_list"
     __table_args__ = (Index("email_idx", "email_id"),)
 
-    user_id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     first_name: Mapped[str | None] = mapped_column(String(50))
     mid_name: Mapped[str | None] = mapped_column(String(50))
     last_name: Mapped[str | None] = mapped_column(String(50))
