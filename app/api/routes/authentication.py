@@ -5,10 +5,11 @@ from fastapi.security import OAuth2PasswordRequestForm
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from datetime import datetime, timezone
 
 from app.core.security import create_access_token
 from app.database.base import get_db
-from app.database.models import User
+from app.database.models import User, UserSession
 from app.utils.utils import hash_password, verify_password
 
 router = APIRouter()
@@ -107,6 +108,23 @@ async def login_user(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
+    access_token,jti =create_access_token(subject=form_data.username)
+
+    start_time = datetime.now(timezone.utc)
+    userSession = UserSession(
+        user_id = existing_user.user_id,
+        jti = jti,
+        session_start = start_time,
+        session_end = None
+    )
+    db.add(userSession)
+    
+    try:
+        await db.commit()
+        await db.refresh(userSession)
+    except Exception:
+        await db.rollback()
+        raise
     return TokenResponse(
-        access_token=create_access_token(subject=form_data.username),
+        access_token = access_token
     )
