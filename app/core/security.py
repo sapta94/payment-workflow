@@ -2,6 +2,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Annotated
 
 import jwt
+import uuid
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from jwt.exceptions import InvalidTokenError
@@ -13,16 +14,17 @@ settings = get_settings()
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl=f"{settings.api_v1_prefix}/auth/login")
 
 
-def create_access_token(subject: str) -> str:
+def create_access_token(subject: str) -> tuple:
     """Create a signed, short-lived access token for an authenticated user."""
     expires_at = datetime.now(timezone.utc) + timedelta(
         minutes=settings.access_token_expire_minutes,
     )
+    token_id = str(uuid.uuid4())
     return jwt.encode(
-        {"sub": subject, "exp": expires_at},
+        {"sub": subject, "jti":token_id, "exp": expires_at},
         settings.jwt_secret_key,
         algorithm=settings.jwt_algorithm,
-    )
+    ), token_id
 
 
 async def get_current_user_email(
