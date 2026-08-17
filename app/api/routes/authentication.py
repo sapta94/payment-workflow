@@ -7,7 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from datetime import datetime, timezone
 
-from app.core.security import create_access_token
+from app.core.security import create_access_token, get_current_user_id
 from app.database.base import get_db
 from app.database.models import User, UserSession
 from app.utils.utils import hash_password, verify_password
@@ -39,6 +39,12 @@ class TokenResponse(BaseModel):
 
     access_token: str
     token_type: str = "bearer"
+
+class LogoutResponse(BaseModel):
+    """Safe response returned after user logout."""
+
+    user_id: int
+    message: str
 
 
 @router.post(
@@ -108,7 +114,7 @@ async def login_user(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    access_token,jti =create_access_token(subject=form_data.username)
+    access_token,jti =create_access_token(subject=existing_user.user_id)
 
     start_time = datetime.now(timezone.utc)
     userSession = UserSession(
@@ -128,3 +134,4 @@ async def login_user(
     return TokenResponse(
         access_token = access_token
     )
+
