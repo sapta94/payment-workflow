@@ -27,9 +27,9 @@ def create_access_token(subject: str) -> tuple:
     ), token_id
 
 
-async def get_current_user_email(
+async def get_current_user_id(
     token: Annotated[str, Depends(oauth2_scheme)],
-) -> str:
+) -> dict[int, str | None]:
     """Validate a bearer token and return its authenticated user's email."""
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
@@ -43,10 +43,11 @@ async def get_current_user_email(
             settings.jwt_secret_key,
             algorithms=[settings.jwt_algorithm],
         )
-        email_id = payload.get("sub")
-        if not isinstance(email_id, str):
+        user_id = payload.get("sub")
+        if not isinstance(user_id, str):
             raise credentials_exception
+        jti = payload.get("jti")
     except InvalidTokenError as error:
         raise credentials_exception from error
 
-    return email_id
+    return { "user_id" : user_id, "jti": jti }
