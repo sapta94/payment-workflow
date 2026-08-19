@@ -3,7 +3,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
 from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import select
+from sqlalchemy import select,update
 from sqlalchemy.ext.asyncio import AsyncSession
 from datetime import datetime, timezone
 
@@ -135,3 +135,22 @@ async def login_user(
         access_token = access_token
     )
 
+@router.post(
+    "/logout",
+    response_model=LogoutResponse,
+    status_code=status.HTTP_200_OK,
+)
+async def logout_user(
+    db: Annotated[AsyncSession, Depends(get_db)]
+) -> LogoutResponse:
+    current_user = get_current_user_id()
+    if current_user is None:
+        return LogoutResponse(
+            user_id = current_user,
+            message = "User Logged out successfully"
+        )
+    
+    await db.execute(update(UserSession).where(UserSession.user_id == current_user).values(session_end=datetime.now(timezone.utc)))
+    await db.commit()
+    
+    
