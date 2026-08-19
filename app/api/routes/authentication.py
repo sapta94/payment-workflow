@@ -141,16 +141,23 @@ async def login_user(
     status_code=status.HTTP_200_OK,
 )
 async def logout_user(
-    db: Annotated[AsyncSession, Depends(get_db)]
+    current_user: Annotated[str, Depends(get_current_user_id)],
+    db: Annotated[AsyncSession, Depends(get_db)],
 ) -> LogoutResponse:
-    current_user = get_current_user_id()
-    if current_user is None:
-        return LogoutResponse(
-            user_id = current_user,
-            message = "User Logged out successfully"
+
+    await db.execute(
+        update(UserSession)
+        .where(UserSession.user_id == int(current_user))
+        .values(
+            session_end=datetime.now(timezone.utc)
         )
-    
-    await db.execute(update(UserSession).where(UserSession.user_id == current_user).values(session_end=datetime.now(timezone.utc)))
+    )
+
     await db.commit()
+
+    return LogoutResponse(
+        user_id=current_user,
+        message="User logged out successfully",
+    )
     
     
