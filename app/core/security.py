@@ -6,8 +6,12 @@ import uuid
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from jwt.exceptions import InvalidTokenError
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+from app.database.base import get_db
 
 from app.core.config import get_settings
+from app.database.models import UserSession
 
 settings = get_settings()
 
@@ -28,8 +32,8 @@ def create_access_token(subject: str) -> tuple:
 
 
 async def get_current_user_id(
-    token: Annotated[str, Depends(oauth2_scheme)],
-) -> dict[int, str | None]:
+    token: Annotated[str, Depends(oauth2_scheme)]
+    ) -> int:
     """Validate a bearer token and return its authenticated user's email."""
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
@@ -38,6 +42,7 @@ async def get_current_user_id(
     )
 
     try:
+        db = get_db()
         payload = jwt.decode(
             token,
             settings.jwt_secret_key,
@@ -47,7 +52,10 @@ async def get_current_user_id(
         if not isinstance(user_id, str):
             raise credentials_exception
         jti = payload.get("jti")
+        active_user = await db.scalar(select(UserSession).where(UserSession.jti == jti))
+        if active_user is None or active_user.session_end < datetime.now(timezone.utc):
+            raise credentials_exception
     except InvalidTokenError as error:
         raise credentials_exception from error
 
-    return { "user_id" : user_id, "jti": jti }
+    return user_id
