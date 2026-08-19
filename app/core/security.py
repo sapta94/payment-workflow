@@ -25,16 +25,18 @@ def create_access_token(subject: str) -> tuple:
     )
     token_id = str(uuid.uuid4())
     return jwt.encode(
-        {"sub": subject, "jti":token_id, "exp": expires_at},
+        {"sub": str(subject), "jti":token_id, "exp": expires_at},
         settings.jwt_secret_key,
         algorithm=settings.jwt_algorithm,
     ), token_id
 
 
 async def get_current_user_id(
-    token: Annotated[str, Depends(oauth2_scheme)]
-    ) -> int:
-    """Validate a bearer token and return its authenticated user's email."""
+    token: Annotated[str, Depends(oauth2_scheme)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> str:
+    """Validate bearer token and return the authenticated user's ID."""
+
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials.",
@@ -42,20 +44,48 @@ async def get_current_user_id(
     )
 
     try:
-        db = get_db()
+        # Decode JWT
         payload = jwt.decode(
             token,
             settings.jwt_secret_key,
             algorithms=[settings.jwt_algorithm],
         )
+
+        # Get user ID from JWT
         user_id = payload.get("sub")
+
         if not isinstance(user_id, str):
             raise credentials_exception
+
+        # Get JWT ID
         jti = payload.get("jti")
-        active_user = await db.scalar(select(UserSession).where(UserSession.jti == jti))
-        if active_user is None or active_user.session_end < datetime.now(timezone.utc):
+
+        if not isinstance(jti, str):
             raise credentials_exception
+
+        # Check whether this session exists
+        active_user = await db.scalar(
+            select(UserSession)
+            .where(UserSession.jti == jti)
+        )
+
+        # Session doesn't exist
+        if active_user is None:
+            raise credentials_exception
+
+        session_end = active_user.session_end
+
+        if session_end is not None:
+
+            # MySQL returns a naive datetime
+            # Treat it as UTC
+            if session_end.tzinfo is None:
+                session_end = session_end.replace(tzinfo=timezone.utc)
+
+            if session_end <= datetime.now(timezone.utc):
+                raise credentials_exception
+
+        return user_id
+
     except InvalidTokenError as error:
         raise credentials_exception from error
-
-    return user_id
