@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import TIMESTAMP, ForeignKey, Index, Integer, String
+from sqlalchemy import TIMESTAMP, ForeignKey, Index, Integer, String, DateTime
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database.base import Base
@@ -32,3 +32,53 @@ class UserSession(Base):
     jti: Mapped[str] = mapped_column(String(255), primary_key=True)
     session_start: Mapped[datetime | None] = mapped_column(TIMESTAMP)
     session_end: Mapped[datetime | None] = mapped_column(TIMESTAMP)
+
+class CardVault(Base):
+    __tablename__ = "CardVault"
+
+    # Randomly generated token.
+    # This is what other services should use instead of the PAN.
+    token: Mapped[str] = mapped_column(
+        String(100),
+        primary_key=True,
+        nullable=False,
+    )
+
+    # AES-GCM encrypted PAN.
+    #
+    # IMPORTANT:
+    # The encryption key is NOT stored in this table.
+    encrypted_pan: Mapped[str] = mapped_column(
+        String(500),
+        nullable=False,
+    )
+
+    card_brand: Mapped[str] = mapped_column(
+        String(20),
+        nullable=False,
+    )
+
+    exp_month: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+    )
+
+    exp_year: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+    )
+
+    # Storing last 4 digits is useful for displaying:
+    # "Visa ending in 1111"
+    #
+    # This is NOT the PAN.
+    last4: Mapped[str] = mapped_column(
+        String(4),
+        nullable=False,
+    )
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        default=datetime.utcnow,
+        nullable=False,
+    )
