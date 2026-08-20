@@ -9,9 +9,12 @@ class Settings(BaseSettings):
     app_name: str = "Payment Workflow API"
     environment: str = "development"
     debug: bool = False
-    api_v1_prefix: str = "/api/v1"
+    api_v1_prefix: str = "/api"
     cors_origins: str = ""
     database_url: str
+    jwt_secret_key: str
+    jwt_algorithm: str = "HS256"
+    access_token_expire_minutes: int = 30
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
