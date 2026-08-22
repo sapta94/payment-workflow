@@ -2,7 +2,9 @@ import base64
 import os
 
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+from app.core.config import get_settings
 
+settings = get_settings()
 
 # The encryption key must come from a secure environment variable
 # or, preferably in production, a KMS/HSM.
@@ -11,7 +13,7 @@ from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 #
 # The key must be exactly 32 bytes for AES-256.
 ENCRYPTION_KEY = base64.b64decode(
-    os.environ["CARD_VAULT_ENCRYPTION_KEY"]
+    settings.card_vault_encryption_key
 )
 
 
