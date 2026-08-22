@@ -34,7 +34,7 @@ class UserSession(Base):
     session_end: Mapped[datetime | None] = mapped_column(TIMESTAMP)
 
 class CardVault(Base):
-    __tablename__ = "CardVault"
+    __tablename__ = "card_vault"
 
     # Randomly generated token.
     # This is what other services should use instead of the PAN.

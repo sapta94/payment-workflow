@@ -27,6 +27,18 @@ AsyncSessionLocal = async_sessionmaker(
     expire_on_commit=False,
 )
 
+vault_engine : AsyncEngine = create_async_engine(
+    settings.vault_database_url,
+    pool_pre_ping=True,
+    pool_recycle=3_600,
+)
+
+AsyncVaultSessionLocal = async_sessionmaker(
+    bind=vault_engine,
+    autoflush=False,
+    expire_on_commit=False,
+)
+
 
 class Base(DeclarativeBase):
     """Base class for all SQLAlchemy ORM models."""
@@ -37,6 +49,10 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
     async with AsyncSessionLocal() as session:
         yield session
 
+async def get_vault_db() -> AsyncGenerator[AsyncSession, None]:
+    """Provide one asynchronous database session per request."""
+    async with AsyncVaultSessionLocal() as session:
+        yield session
 
 async def check_database_connection() -> str:
     """Raise an exception when MySQL cannot be reached."""
