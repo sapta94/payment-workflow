@@ -4,11 +4,12 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database.base import get_vault_db, get_db
+from sqlalchemy import select
 from app.core.encryption import encrypt_pan
 from app.utils.utils import generate_card_token
 from app.core.security import get_current_user_id
 
-from app.database.models import CardVault, PaymentMethod
+from app.database.models import CardVault, PaymentMethod, User
 
 from app.utils.utils import detect_card_brand
 
@@ -190,6 +191,9 @@ class PaymentMethodResponse(BaseModel):
     """Safe response returned after user payment method mapping."""
     message: str
 
+class GetCardsResponse(BaseModel):
+    cards: list[CardTokenResponse]
+    message: str
 
 @router.post(
     "/cards",
@@ -335,3 +339,45 @@ async def add_payment_method(
     return PaymentMethodResponse(
         message="Card Successfully Saved"
     )
+
+@router.get(
+    "/cards",
+    response_model=GetCardsResponse,
+    status_code=status.HTTP_200_OK
+) 
+async def get_card_details(
+    current_user : Annotated[str, Depends(get_current_user_id)],
+    db : Annotated[AsyncSession, Depends(get_db)],
+    vault_db : Annotated[AsyncSession, Depends(get_vault_db)]
+) -> GetCardsResponse:
+    """
+    Fetch ALl Saved cards of an User
+    """
+    result = await db.scalars( select(PaymentMethod).where( PaymentMethod.user_id == current_user ) ) 
+    payment_methods = result.all()
+    if not payment_methods: 
+        return GetCardsResponse( 
+            cards=[], 
+            message="No Saved Payment Methods Found"
+        )
+
+    tokens = [ payment_method.token for payment_method in payment_methods ]
+   
+    card_details = await vault_db.scalars(select(CardVault).where(CardVault.token.in_(tokens)))
+    card_details = card_details.all()
+
+    all_cards = [ 
+        CardTokenResponse( token=card.token, card_brand=card.card_brand, last4=card.last4, exp_month=card.exp_month, exp_year=card.exp_year) 
+        for card in card_details 
+        ]
+
+    if all_cards is None:
+        return GetCardsResponse(
+            cards = [],
+            message = "No Saved Payments Methods Found"
+        )
+
+    return GetCardsResponse(
+                cards = all_cards,
+                message = "Payment Methods Found"
+            )
