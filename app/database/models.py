@@ -82,3 +82,15 @@ class CardVault(Base):
         default=datetime.utcnow,
         nullable=False,
     )
+
+class PaymentMethod(Base):
+    __tablename__ = "user_payment_methods"
+
+    payment_method_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(
+            ForeignKey("user_list.user_id")
+        )
+    token: Mapped[str] = mapped_column(
+        String(100),
+        nullable=False,
+    )
