@@ -3,10 +3,12 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.database.base import get_vault_db
+from app.database.base import get_vault_db, get_db
 from app.core.encryption import encrypt_pan
 from app.utils.utils import generate_card_token
-from app.database.models import CardVault
+from app.core.security import get_current_user_id
+
+from app.database.models import CardVault, PaymentMethod
 
 from app.utils.utils import detect_card_brand
 
@@ -180,6 +182,14 @@ class CardTokenResponse(BaseModel):
     exp_year: int
 
 
+class PaymentMethodRequest(BaseModel):
+    """Request model to create a Payment method, mapping card details to an user"""
+    token: str
+
+class PaymentMethodResponse(BaseModel):
+    """Safe response returned after user payment method mapping."""
+    message: str
+
 
 @router.post(
     "/cards",
@@ -291,4 +301,37 @@ async def tokenize_card(
         last4=pan[-4:],
         exp_month=card.exp_month,
         exp_year=card.exp_year,
+    )
+
+
+@router.post(
+    "/payment_method",
+    response_model=PaymentMethodResponse,
+    status_code=status.HTTP_200_OK,
+)
+async def add_payment_method(
+    data: PaymentMethodRequest,
+    current_user: Annotated[str, Depends(get_current_user_id)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> PaymentMethodResponse:
+    """
+    Map a card token against the current user_id
+    """
+
+    paymentMethod = PaymentMethod(
+        user_id = current_user,
+        token = data.token
+    )
+
+    db.add(paymentMethod)
+    
+    try:
+        await db.commit()
+        await db.refresh(paymentMethod)
+    except Exception:
+        await db.rollback()
+        raise
+
+    return PaymentMethodResponse(
+        message="Card Successfully Saved"
     )
