@@ -1,10 +1,15 @@
 from datetime import datetime
 
-from sqlalchemy import TIMESTAMP, ForeignKey, Index, Integer, String, DateTime
+from sqlalchemy import TIMESTAMP, ForeignKey, Index, Integer, String, DateTime, Enum
 from sqlalchemy.orm import Mapped, mapped_column
+from enum import Enum as pyenum
 
 from app.database.base import Base
 
+
+class UserType(str, pyenum):
+    USER = "USER"
+    MERCHANT = "MERCHANT"
 
 class User(Base):
     """A user record stored in the user_list MySQL table."""
@@ -18,6 +23,7 @@ class User(Base):
     last_name: Mapped[str | None] = mapped_column(String(50))
     email_id: Mapped[str | None] = mapped_column(String(50))
     hashed_password: Mapped[str | None] = mapped_column("password", String(255))
+    user_type: Mapped[UserType] = mapped_column(Enum(UserType, native_enum=False), default=UserType.USER)
 
 
 class UserSession(Base):
