@@ -122,3 +122,18 @@ class Merchant(Base):
     postal_code: Mapped[str | None] = mapped_column(String(20))
     created_at: Mapped[datetime | None] = mapped_column(TIMESTAMP, default=datetime.now(timezone.utc),nullable=False)
     updated_at: Mapped[datetime | None] = mapped_column(TIMESTAMP, nullable=False)
+
+class MerchantBank(Base):
+    """Bank details of a user with the MERCHANT account type."""
+
+    __tablename__ = "merchant_vault"
+    
+    
+    merchant_id: Mapped[int] = mapped_column(
+            primary_key=True,
+        )
+    encrypted_tin: Mapped[str] = mapped_column(String(500), nullable=False)
+    encrypted_bank_account: Mapped[str] = mapped_column(String(1000), nullable=False)
+    encrypted_routing_number: Mapped[str] = mapped_column(String(500),  nullable=False)
+    created_at: Mapped[datetime | None] = mapped_column(TIMESTAMP, default=datetime.now(timezone.utc),nullable=False)
+    updated_at: Mapped[datetime | None] = mapped_column(TIMESTAMP, nullable=False)
