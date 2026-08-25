@@ -32,7 +32,7 @@ class CreatePaymentRequest(BaseModel):
     payment_method_id: Annotated[int, Field(gt=0)]
     amount: Annotated[Decimal, Field(gt=0, max_digits=12, decimal_places=2)]
     currency: Annotated[str, Field(min_length=3, max_length=3)]
-    idempotency_key: Annotated[str, Field(min_length=1, max_length=100)]
+    #idempotency_key: Annotated[str, Field(min_length=1, max_length=100)]
 
     @field_validator("currency")
     @classmethod
@@ -61,7 +61,7 @@ class FetchPaymentResponse(BaseModel):
     currency: str
     status: str
     provider: str | None
-    provider_payment_id: str | None
+    transaction_id: str | None
     failure_code: str | None
     failure_message: str | None
 
@@ -150,7 +150,7 @@ async def create_payment(
    
     payment_method = await db.scalar(
         select(PaymentMethod).where(
-            PaymentMethod.id
+            PaymentMethod.payment_method_id
             == payment_request.payment_method_id,
             PaymentMethod.user_id
             == current_user,
@@ -209,12 +209,78 @@ async def create_payment(
         payment_method_id=payment.payment_method_id,
         amount=payment.amount,
         currency=payment.currency,
-        payment_status=payment.status,
+        payment_status=payment.payment_status,
         message="Payment created successfully.",
     )
 
 
+@router.get(
+    "/fetch-payment/{payment_id}",
+    response_model=FetchPaymentResponse,
+    status_code=status.HTTP_200_OK,
+)
+async def fetch_payment(
+    payment_id: int,
+    current_user: Annotated[int,Depends(get_current_user_id)],
+    db: Annotated[AsyncSession,Depends(get_db)],
+) -> FetchPaymentResponse:
+    """
+    Fetch details of a payment.
 
+    The authenticated user's ID is compared against the
+    user_id stored against the payment.
+
+    A user can therefore only fetch their own payments.
+    """
+
+    # ---------------------------------------------------------
+    # Find the payment AND verify that it belongs to the
+    # currently authenticated user.
+    # ---------------------------------------------------------
+
+    payment = await db.scalar(
+        select(Payment).where(
+            Payment.payment_id == payment_id,
+            Payment.user_id == current_user,
+        )
+    )
+
+    # ---------------------------------------------------------
+    # If either:
+    #
+    # 1. Payment doesn't exist
+    # OR
+    # 2. Payment belongs to another user
+    #
+    # return 404.
+    #
+    # We don't reveal whether a payment with that ID exists
+    # for another user.
+    # ---------------------------------------------------------
+
+    if payment is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Payment not found.",
+        )
+
+    # ---------------------------------------------------------
+    # Return payment details
+    # ---------------------------------------------------------
+
+    return FetchPaymentResponse(
+        payment_id=payment.payment_id,
+        user_id=payment.user_id,
+        merchant_id=payment.merchant_id,
+        payment_method_id=payment.payment_method_id,
+        amount=payment.amount,
+        currency=payment.currency,
+        status=payment.payment_status,
+        provider=payment.provider,
+        transaction_id=payment.transaction_id,
+        failure_code=payment.failure_code,
+        failure_message=payment.failure_message,
+    )
 
 
 
