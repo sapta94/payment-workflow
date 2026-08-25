@@ -6,10 +6,11 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select,update
 from sqlalchemy.ext.asyncio import AsyncSession
 from datetime import datetime, timezone
+from enum import Enum
 
 from app.core.security import create_access_token, get_current_user_id
 from app.database.base import get_db
-from app.database.models import User, UserSession
+from app.database.models import User, UserSession,UserType
 from app.utils.utils import hash_password, verify_password
 
 router = APIRouter()
@@ -25,6 +26,7 @@ class RegisterUserRequest(BaseModel):
     last_name: Annotated[str, Field(max_length=50)]
     email_id: Annotated[str, Field(max_length=50)]
     password: Annotated[str, Field(min_length=8, max_length=128)]
+    user_type: Annotated[UserType, Field(default=UserType.USER)] 
 
 
 class RegisterUserResponse(BaseModel):
@@ -70,6 +72,7 @@ async def register_user(
         last_name=user_data.last_name,
         email_id=user_data.email_id,
         hashed_password=hash_password(user_data.password),
+        user_type=user_data.user_type
     )
     db.add(user)
 

@@ -12,8 +12,12 @@ settings = get_settings()
 # DO NOT store this key in MySQL.
 #
 # The key must be exactly 32 bytes for AES-256.
-ENCRYPTION_KEY = base64.b64decode(
+CARD_ENCRYPTION_KEY = base64.b64decode(
     settings.card_vault_encryption_key
+)
+
+BANK_ENCRYPTION_KEY = base64.b64decode(
+    settings.merchant_vault_encryption_key
 )
 
 
@@ -28,7 +32,7 @@ def encrypt_pan(pan: str) -> str:
     A new random nonce is generated for every encryption operation.
     """
 
-    aesgcm = AESGCM(ENCRYPTION_KEY)
+    aesgcm = AESGCM(CARD_ENCRYPTION_KEY)
 
     # AES-GCM commonly uses a 12-byte nonce.
     nonce = os.urandom(12)
@@ -61,7 +65,7 @@ def decrypt_pan(encrypted_pan: str) -> str:
     Normal application services should never need to call this.
     """
 
-    aesgcm = AESGCM(ENCRYPTION_KEY)
+    aesgcm = AESGCM(CARD_ENCRYPTION_KEY)
 
     encrypted_value = base64.b64decode(
         encrypted_pan
@@ -80,3 +84,33 @@ def decrypt_pan(encrypted_pan: str) -> str:
     )
 
     return decrypted_pan.decode("utf-8")
+
+def encrypt_bank_numbers(number: str) -> str:
+    """
+    Encrypt the bank naccount number, routing number, TIN using AES-256-GCM.
+
+
+    A new random nonce is generated for every encryption operation.
+    """
+
+    aesgcm = AESGCM(BANK_ENCRYPTION_KEY)
+
+    # AES-GCM commonly uses a 12-byte nonce.
+    nonce = os.urandom(12)
+
+    encrypted_data = aesgcm.encrypt(
+        nonce,
+        number.encode("utf-8"),
+        None,
+    )
+
+    # We need to store both the nonce and encrypted data.
+    #
+    # The nonce does NOT need to be secret.
+    # It only needs to be unique for a given encryption key.
+    encrypted_value = nonce + encrypted_data
+
+    # Database stores the result as text.
+    return base64.b64encode(
+        encrypted_value
+    ).decode("utf-8")

@@ -1,10 +1,15 @@
-from datetime import datetime
+from datetime import datetime, timezone
+from enum import Enum as pyenum
 
-from sqlalchemy import TIMESTAMP, ForeignKey, Index, Integer, String, DateTime
+from sqlalchemy import TIMESTAMP, DateTime, Enum, ForeignKey, Index, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database.base import Base
 
+
+class UserType(str, pyenum):
+    USER = "USER"
+    MERCHANT = "MERCHANT"
 
 class User(Base):
     """A user record stored in the user_list MySQL table."""
@@ -18,6 +23,10 @@ class User(Base):
     last_name: Mapped[str | None] = mapped_column(String(50))
     email_id: Mapped[str | None] = mapped_column(String(50))
     hashed_password: Mapped[str | None] = mapped_column("password", String(255))
+    user_type: Mapped[UserType] = mapped_column(
+        Enum(UserType, native_enum=False),
+        default=UserType.USER,
+    )
 
 
 class UserSession(Base):
@@ -94,3 +103,37 @@ class PaymentMethod(Base):
         String(100),
         nullable=False,
     )
+
+
+class Merchant(Base):
+    """Business profile owned by a user with the MERCHANT account type."""
+
+    __tablename__ = "merchant_list"
+
+    merchant_id: Mapped[int] = mapped_column(
+        ForeignKey("user_list.user_id"),
+        primary_key=True,
+    )
+    business_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    business_address: Mapped[str] = mapped_column(String(500), nullable=False)
+    city: Mapped[str | None] = mapped_column(String(100))
+    state: Mapped[str | None] = mapped_column(String(100))
+    country: Mapped[str | None] = mapped_column(String(100))
+    postal_code: Mapped[str | None] = mapped_column(String(20))
+    created_at: Mapped[datetime | None] = mapped_column(TIMESTAMP, default=datetime.now(timezone.utc),nullable=False)
+    updated_at: Mapped[datetime | None] = mapped_column(TIMESTAMP, nullable=False)
+
+class MerchantBank(Base):
+    """Bank details of a user with the MERCHANT account type."""
+
+    __tablename__ = "merchant_vault"
+    
+    
+    merchant_id: Mapped[int] = mapped_column(
+            primary_key=True,
+        )
+    encrypted_tin: Mapped[str] = mapped_column(String(500), nullable=False)
+    encrypted_bank_account: Mapped[str] = mapped_column(String(1000), nullable=False)
+    encrypted_routing_number: Mapped[str] = mapped_column(String(500),  nullable=False)
+    created_at: Mapped[datetime | None] = mapped_column(TIMESTAMP, default=datetime.now(timezone.utc),nullable=False)
+    updated_at: Mapped[datetime | None] = mapped_column(TIMESTAMP, nullable=False)
