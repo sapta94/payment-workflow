@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime
 from decimal import Decimal
 from enum import Enum as pyenum
 
@@ -12,7 +12,8 @@ from sqlalchemy import (
     Index,
     Integer,
     Numeric,
-    String
+    String,
+    text,
 )
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -142,8 +143,17 @@ class Merchant(Base):
     state: Mapped[str | None] = mapped_column(String(100))
     country: Mapped[str | None] = mapped_column(String(100))
     postal_code: Mapped[str | None] = mapped_column(String(20))
-    created_at: Mapped[datetime | None] = mapped_column(TIMESTAMP, default=datetime.now(timezone.utc),nullable=False)
-    updated_at: Mapped[datetime | None] = mapped_column(TIMESTAMP, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP,
+        nullable=False,
+        server_default=text("CURRENT_TIMESTAMP"),
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP,
+        nullable=False,
+        server_default=text("CURRENT_TIMESTAMP"),
+        server_onupdate=FetchedValue(),
+    )
 
 class MerchantBank(Base):
     """Bank details of a user with the MERCHANT account type."""
@@ -157,8 +167,17 @@ class MerchantBank(Base):
     encrypted_tin: Mapped[str] = mapped_column(String(500), nullable=False)
     encrypted_bank_account: Mapped[str] = mapped_column(String(1000), nullable=False)
     encrypted_routing_number: Mapped[str] = mapped_column(String(500),  nullable=False)
-    created_at: Mapped[datetime | None] = mapped_column(TIMESTAMP, default=datetime.now(timezone.utc),nullable=False)
-    updated_at: Mapped[datetime | None] = mapped_column(TIMESTAMP, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP,
+        nullable=False,
+        server_default=text("CURRENT_TIMESTAMP"),
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP,
+        nullable=False,
+        server_default=text("CURRENT_TIMESTAMP"),
+        server_onupdate=FetchedValue(),
+    )
 
 
 class Payment(Base):
@@ -190,5 +209,14 @@ class Payment(Base):
     idempotency_key: Mapped[str] = mapped_column(String(100), nullable=False)
     failure_code: Mapped[str | None] = mapped_column(String(100))
     failure_message: Mapped[str | None] = mapped_column(String(500))
-    created_at: Mapped[datetime | None] = mapped_column(TIMESTAMP, default=datetime.now(timezone.utc),nullable=False)
-    updated_at: Mapped[datetime | None] = mapped_column(TIMESTAMP, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP,
+        nullable=False,
+        server_default=text("CURRENT_TIMESTAMP"),
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP,
+        nullable=False,
+        server_default=text("CURRENT_TIMESTAMP"),
+        server_onupdate=FetchedValue(),
+    )

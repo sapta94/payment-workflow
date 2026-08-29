@@ -1,27 +1,21 @@
-from datetime import datetime, timezone
-from typing import Annotated
-from pydantic import BaseModel, ConfigDict, Field, field_validator
 from decimal import Decimal
+from typing import Annotated
 
-from fastapi import (
-    APIRouter,
-    Depends,
-    Header,
-    HTTPException,
-    status,
-)
+from fastapi import APIRouter, Depends, Header, HTTPException, status
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.database.models import Payment, PaymentMethod
-from app.database.models import Merchant
-
-from app.database.base import get_db
 from app.core.security import get_current_user_id
-
-
+from app.database.base import get_db
+from app.database.models import Merchant, Payment, PaymentMethod, PaymentStatus
+from app.orchestrator.orchestrator import PaymentOrchestrator
+from app.orchestrator.processors.base import ProcessorPaymentRequest
 
 router = APIRouter()
+payment_orchestrator = PaymentOrchestrator()
+
 
 class CreatePaymentRequest(BaseModel):
     """Client-supplied values required to start a payment."""
@@ -32,7 +26,6 @@ class CreatePaymentRequest(BaseModel):
     payment_method_id: Annotated[int, Field(gt=0)]
     amount: Annotated[Decimal, Field(gt=0, max_digits=12, decimal_places=2)]
     currency: Annotated[str, Field(min_length=3, max_length=3)]
-    #idempotency_key: Annotated[str, Field(min_length=1, max_length=100)]
 
     @field_validator("currency")
     @classmethod
@@ -43,27 +36,45 @@ class CreatePaymentRequest(BaseModel):
             raise ValueError("Currency must contain only letters")
         return currency
 
-class CreatePaymentResponse(BaseModel):
-    payment_id: int
-    merchant_id: int
-    payment_method_id: int
-    amount: Decimal
-    currency: str
-    payment_status: str
-    message: str
 
-class FetchPaymentResponse(BaseModel):
+class CreatePaymentResponse(BaseModel):
+    """Final, normalized result of a payment attempt."""
+
     payment_id: int
-    user_id: int
     merchant_id: int
     payment_method_id: int
     amount: Decimal
     currency: str
-    status: str
+    payment_status: PaymentStatus
     provider: str | None
     transaction_id: str | None
     failure_code: str | None
     failure_message: str | None
+    message: str
+
+
+class FetchPaymentResponse(CreatePaymentResponse):
+    """Payment details visible only to the user who created the payment."""
+
+    user_id: int
+
+
+def build_payment_response(payment: Payment, message: str) -> CreatePaymentResponse:
+    """Build a public response without exposing the saved card token."""
+    return CreatePaymentResponse(
+        payment_id=payment.payment_id,
+        merchant_id=payment.merchant_id,
+        payment_method_id=payment.payment_method_id,
+        amount=payment.amount,
+        currency=payment.currency,
+        payment_status=payment.payment_status,
+        provider=payment.provider,
+        transaction_id=payment.transaction_id,
+        failure_code=payment.failure_code,
+        failure_message=payment.failure_message,
+        message=message,
+    )
+
 
 @router.post(
     "/make-payment",
@@ -72,146 +83,109 @@ class FetchPaymentResponse(BaseModel):
 )
 async def create_payment(
     payment_request: CreatePaymentRequest,
-    current_user: Annotated[int, Depends(get_current_user_id)],
-    db: Annotated[AsyncSession,Depends(get_db)],
-
-    idempotency_key: Annotated[
-        str,
-        Header(...),
-    ],
+    current_user_id: Annotated[str, Depends(get_current_user_id)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+    idempotency_key: Annotated[str, Header(min_length=1, max_length=100)],
 ) -> CreatePaymentResponse:
-    """
-    Create a new payment.
-
-    Current responsibility of this endpoint:
-
-        1. Authenticate customer.
-        2. Validate merchant.
-        3. Validate payment method.
-        4. Ensure payment method belongs to customer.
-        5. Check idempotency.
-        6. Create Payment record.
-        7. Return CREATED payment.
-    """
-
-    # =========================================================
-    # 1. Validate idempotency key
-    # =========================================================
-
-    if not idempotency_key.strip():
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Idempotency-Key cannot be empty.",
-        )
-
-    # =========================================================
-    # 2. Check whether this request was already processed
-    #
-    # This prevents accidental duplicate payments when a
-    # client retries the same request.
-    # =========================================================
+    """Create, route, process, normalize, and persist one payment attempt."""
+    user_id = int(current_user_id)
 
     existing_payment = await db.scalar(
         select(Payment).where(
-            Payment.user_id == current_user,
+            Payment.user_id == user_id,
             Payment.idempotency_key == idempotency_key,
-        )
+        ),
     )
-
     if existing_payment is not None:
-
-        # Return a 409 Conflict mwith message if idempotency key is already present
-
         raise HTTPException(
-                    status_code=status.HTTP_409_CONFLICT,
-                    detail="Payment already exists for this idempotency key.",
-                )
-
-    # =========================================================
-    # 3. Verify merchant exists
-    # =========================================================
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Payment already exists for this idempotency key.",
+        )
 
     merchant = await db.scalar(
-        select(Merchant).where(
-            Merchant.merchant_id
-            == payment_request.merchant_id
-        )
+        select(Merchant).where(Merchant.merchant_id == payment_request.merchant_id),
     )
-
     if merchant is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Merchant not found.",
         )
 
-    # =========================================================
-    # 4. Verify payment method belongs to current user
-    # =========================================================
-   
     payment_method = await db.scalar(
         select(PaymentMethod).where(
-            PaymentMethod.payment_method_id
-            == payment_request.payment_method_id,
-            PaymentMethod.user_id
-            == current_user,
-        )
+            PaymentMethod.payment_method_id == payment_request.payment_method_id,
+            PaymentMethod.user_id == user_id,
+        ),
     )
-
     if payment_method is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Payment method not found.",
         )
 
-    # =========================================================
-    # 5. Create Payment record
-    # =========================================================
-
     payment = Payment(
-        user_id=current_user,
-
+        user_id=user_id,
         merchant_id=payment_request.merchant_id,
-
         payment_method_id=payment_request.payment_method_id,
-
         amount=payment_request.amount,
-
         currency=payment_request.currency,
-
-        payment_status="CREATED",
-
-        provider=None,
-
-        transaction_id=None,
-
+        payment_status=PaymentStatus.CREATED,
         idempotency_key=idempotency_key,
-
-        failure_code=None,
-
-        failure_message=None,
-
-        created_at=datetime.now(timezone.utc),
-
-        updated_at=datetime.now(timezone.utc),
     )
-
-
     db.add(payment)
 
+    try:
+        await db.commit()
+        await db.refresh(payment)
+    except IntegrityError as error:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Payment already exists for this idempotency key.",
+        ) from error
+
+    payment.payment_status = PaymentStatus.PROCESSING
     await db.commit()
 
-    await db.refresh(payment)
-
-
-    return CreatePaymentResponse(
+    processor_request = ProcessorPaymentRequest(
         payment_id=payment.payment_id,
         merchant_id=payment.merchant_id,
-        payment_method_id=payment.payment_method_id,
         amount=payment.amount,
         currency=payment.currency,
-        payment_status=payment.payment_status,
-        message="Payment created successfully.",
+        payment_token=payment_method.token,
     )
+
+    try:
+        processor_result = await payment_orchestrator.process_payment(processor_request)
+    except Exception:
+        payment.payment_status = PaymentStatus.FAILED
+        payment.failure_code = "PROCESSOR_ERROR"
+        payment.failure_message = "The payment processor could not complete the payment."
+        payment.provider = None
+        payment.transaction_id = None
+        message = "Payment failed."
+    else:
+        payment.payment_status = (
+            PaymentStatus.SUCCESS if processor_result.success else PaymentStatus.FAILED
+        )
+        payment.provider = processor_result.processor
+        payment.transaction_id = processor_result.processor_transaction_id
+        payment.failure_code = processor_result.error_code
+        payment.failure_message = processor_result.error_message
+        message = (
+            "Payment completed successfully."
+            if processor_result.success
+            else "Payment failed."
+        )
+
+    try:
+        await db.commit()
+        await db.refresh(payment)
+    except Exception:
+        await db.rollback()
+        raise
+
+    return build_payment_response(payment, message)
 
 
 @router.get(
@@ -221,66 +195,24 @@ async def create_payment(
 )
 async def fetch_payment(
     payment_id: int,
-    current_user: Annotated[int,Depends(get_current_user_id)],
-    db: Annotated[AsyncSession,Depends(get_db)],
+    current_user_id: Annotated[str, Depends(get_current_user_id)],
+    db: Annotated[AsyncSession, Depends(get_db)],
 ) -> FetchPaymentResponse:
-    """
-    Fetch details of a payment.
-
-    The authenticated user's ID is compared against the
-    user_id stored against the payment.
-
-    A user can therefore only fetch their own payments.
-    """
-
-    # ---------------------------------------------------------
-    # Find the payment AND verify that it belongs to the
-    # currently authenticated user.
-    # ---------------------------------------------------------
-
+    """Return a payment only when it belongs to the authenticated user."""
+    user_id = int(current_user_id)
     payment = await db.scalar(
         select(Payment).where(
             Payment.payment_id == payment_id,
-            Payment.user_id == current_user,
-        )
+            Payment.user_id == user_id,
+        ),
     )
-
-    # ---------------------------------------------------------
-    # If either:
-    #
-    # 1. Payment doesn't exist
-    # OR
-    # 2. Payment belongs to another user
-    #
-    # return 404.
-    #
-    # We don't reveal whether a payment with that ID exists
-    # for another user.
-    # ---------------------------------------------------------
-
     if payment is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Payment not found.",
         )
 
-    # ---------------------------------------------------------
-    # Return payment details
-    # ---------------------------------------------------------
-
     return FetchPaymentResponse(
-        payment_id=payment.payment_id,
+        **build_payment_response(payment, "Payment found.").model_dump(),
         user_id=payment.user_id,
-        merchant_id=payment.merchant_id,
-        payment_method_id=payment.payment_method_id,
-        amount=payment.amount,
-        currency=payment.currency,
-        status=payment.payment_status,
-        provider=payment.provider,
-        transaction_id=payment.transaction_id,
-        failure_code=payment.failure_code,
-        failure_message=payment.failure_message,
     )
-
-
-

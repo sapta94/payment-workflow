@@ -7,4 +7,4 @@ api_router.include_router(authentication.router, prefix="/auth", tags=["authenti
 api_router.include_router(encryption.router, prefix="/card-vault", tags=["card_vault"])
 api_router.include_router(health.router, prefix="/health", tags=["health"])
 api_router.include_router(merchant.router, prefix="/merchant" ,tags=["merchants"])
-api_router.include_router(payment.router, prefix="/payment" ,tags=["payments"])
+api_router.include_router(payment.router, prefix="/payment", tags=["payments"])
