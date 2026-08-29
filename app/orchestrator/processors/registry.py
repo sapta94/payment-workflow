@@ -1,7 +1,7 @@
 from app.orchestrator.processors.base import PaymentProcessor
 from app.orchestrator.processors.processor_a import ProcessorA
 from app.orchestrator.processors.processor_b import ProcessorB
-from app.orchestrator.processors.processor_c import  ProcessorC
+from app.orchestrator.processors.processor_c import ProcessorC
 
 
 class ProcessorRegistry:
