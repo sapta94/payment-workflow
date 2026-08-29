@@ -1,7 +1,20 @@
-from datetime import datetime, timezone
+from datetime import datetime
+from decimal import Decimal
 from enum import Enum as pyenum
 
-from sqlalchemy import TIMESTAMP, DateTime, Enum, ForeignKey, Index, Integer, String
+from sqlalchemy import (
+    TIMESTAMP,
+    BigInteger,
+    DateTime,
+    Enum,
+    FetchedValue,
+    ForeignKey,
+    Index,
+    Integer,
+    Numeric,
+    String,
+    text,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database.base import Base
@@ -10,6 +23,16 @@ from app.database.base import Base
 class UserType(str, pyenum):
     USER = "USER"
     MERCHANT = "MERCHANT"
+
+
+class PaymentStatus(str, pyenum):
+    CREATED = "CREATED"
+    PROCESSING = "PROCESSING"
+    SUCCESS = "SUCCESS"
+    FAILED = "FAILED"
+    CANCELLED = "CANCELLED"
+    REFUNDED = "REFUNDED"
+
 
 class User(Base):
     """A user record stored in the user_list MySQL table."""
@@ -120,8 +143,17 @@ class Merchant(Base):
     state: Mapped[str | None] = mapped_column(String(100))
     country: Mapped[str | None] = mapped_column(String(100))
     postal_code: Mapped[str | None] = mapped_column(String(20))
-    created_at: Mapped[datetime | None] = mapped_column(TIMESTAMP, default=datetime.now(timezone.utc),nullable=False)
-    updated_at: Mapped[datetime | None] = mapped_column(TIMESTAMP, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP,
+        nullable=False,
+        server_default=text("CURRENT_TIMESTAMP"),
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP,
+        nullable=False,
+        server_default=text("CURRENT_TIMESTAMP"),
+        server_onupdate=FetchedValue(),
+    )
 
 class MerchantBank(Base):
     """Bank details of a user with the MERCHANT account type."""
@@ -135,5 +167,56 @@ class MerchantBank(Base):
     encrypted_tin: Mapped[str] = mapped_column(String(500), nullable=False)
     encrypted_bank_account: Mapped[str] = mapped_column(String(1000), nullable=False)
     encrypted_routing_number: Mapped[str] = mapped_column(String(500),  nullable=False)
-    created_at: Mapped[datetime | None] = mapped_column(TIMESTAMP, default=datetime.now(timezone.utc),nullable=False)
-    updated_at: Mapped[datetime | None] = mapped_column(TIMESTAMP, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP,
+        nullable=False,
+        server_default=text("CURRENT_TIMESTAMP"),
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP,
+        nullable=False,
+        server_default=text("CURRENT_TIMESTAMP"),
+        server_onupdate=FetchedValue(),
+    )
+
+
+class Payment(Base):
+    """A payment transaction stored in the PayE payment table."""
+
+    __tablename__ = "payment"
+    __table_args__ = (
+        Index("uk_payment_idempotency", "user_id", "idempotency_key", unique=True),
+        Index("idx_payment_user", "user_id"),
+        Index("idx_payment_merchant", "merchant_id"),
+        Index("idx_payment_method", "payment_method_id"),
+        Index("idx_payment_status", "payment_status"),
+        Index("idx_provider_payment", "transaction_id"),
+    )
+
+    payment_id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    merchant_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    payment_method_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
+    currency: Mapped[str] = mapped_column(String(3), nullable=False)
+    payment_status: Mapped[PaymentStatus] = mapped_column(
+        Enum(PaymentStatus, native_enum=True),
+        nullable=False,
+        default=PaymentStatus.CREATED,
+    )
+    provider: Mapped[str | None] = mapped_column(String(30))
+    transaction_id: Mapped[str | None] = mapped_column(String(100))
+    idempotency_key: Mapped[str] = mapped_column(String(100), nullable=False)
+    failure_code: Mapped[str | None] = mapped_column(String(100))
+    failure_message: Mapped[str | None] = mapped_column(String(500))
+    created_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP,
+        nullable=False,
+        server_default=text("CURRENT_TIMESTAMP"),
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP,
+        nullable=False,
+        server_default=text("CURRENT_TIMESTAMP"),
+        server_onupdate=FetchedValue(),
+    )
