@@ -5,6 +5,7 @@ from enum import Enum as pyenum
 from sqlalchemy import (
     TIMESTAMP,
     BigInteger,
+    Boolean,
     DateTime,
     Enum,
     FetchedValue,
@@ -126,6 +127,70 @@ class PaymentMethod(Base):
         String(100),
         nullable=False,
     )
+
+
+class PaymentProcessor(Base):
+    """A remote processor server that can execute a card payment."""
+
+    __tablename__ = "PaymentProcessor"
+
+    processor_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    processor_code: Mapped[str] = mapped_column(String(50), unique=True, nullable=False)
+    processor_name: Mapped[str] = mapped_column(String(100), nullable=False)
+    base_url: Mapped[str] = mapped_column(String(255), nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    base_priority: Mapped[int] = mapped_column(Integer, nullable=False, default=100)
+    created_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP,
+        nullable=False,
+        server_default=text("CURRENT_TIMESTAMP"),
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP,
+        nullable=False,
+        server_default=text("CURRENT_TIMESTAMP"),
+        server_onupdate=FetchedValue(),
+    )
+
+
+class ProcessorCapability(Base):
+    """A processor's supported card-network, geography, and currency tuple."""
+
+    __tablename__ = "ProcessorCapability"
+
+    capability_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    processor_id: Mapped[int] = mapped_column(
+        ForeignKey("PaymentProcessor.processor_id"),
+        nullable=False,
+    )
+    card_network: Mapped[str] = mapped_column(String(30), nullable=False)
+    geography: Mapped[str] = mapped_column(String(10), nullable=False)
+    currency: Mapped[str] = mapped_column(String(3), nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+
+
+class ProcessorMetrics(Base):
+    """Measured processor performance for one capability tuple."""
+
+    __tablename__ = "ProcessorMetrics"
+
+    metrics_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    processor_id: Mapped[int] = mapped_column(
+        ForeignKey("PaymentProcessor.processor_id"),
+        nullable=False,
+    )
+    card_network: Mapped[str] = mapped_column(String(30), nullable=False)
+    geography: Mapped[str] = mapped_column(String(10), nullable=False)
+    currency: Mapped[str] = mapped_column(String(3), nullable=False)
+    total_transactions: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
+    successful_transactions: Mapped[int] = mapped_column(
+        BigInteger,
+        nullable=False,
+        default=0,
+    )
+    failed_transactions: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
+    success_rate: Mapped[Decimal] = mapped_column(Numeric(5, 2), nullable=False, default=0)
+    average_latency_ms: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
 
 class Merchant(Base):
