@@ -18,6 +18,7 @@ from app.orchestrator.processors.base import ProcessorPaymentRequest
 class RoutingCandidate:
     """An eligible processor server, including its score and execution rank."""
 
+    processor_id: int
     processor_code: str
     processor_name: str
     base_url: str
@@ -113,6 +114,7 @@ class PaymentRouter:
             reason = f"{reason} ({latency} ms average latency)"
 
         return RoutingCandidate(
+            processor_id=processor.processor_id,
             processor_code=processor.processor_code,
             processor_name=processor.processor_name,
             base_url=processor.base_url,
