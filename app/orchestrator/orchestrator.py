@@ -15,6 +15,7 @@ from app.orchestrator.processors.base import (
 from app.orchestrator.processors.registry import ProcessorRegistry
 from app.orchestrator.router import PaymentRouter
 
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
