@@ -18,6 +18,11 @@ class ProcessorPaymentRequest:
 
     currency: str
 
+    # Routing context only; the processor never receives a PAN or CVV.
+    card_network: str
+
+    geography: str
+
     payment_token: str
 
 
@@ -29,7 +34,7 @@ class ProcessorPaymentResult:
 
     success: bool
 
-    processor: str
+    processor: str | None
 
     processor_transaction_id: str | None
 

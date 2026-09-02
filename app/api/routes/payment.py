@@ -8,8 +8,8 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import get_current_user_id
-from app.database.base import get_db
-from app.database.models import Merchant, Payment, PaymentMethod, PaymentStatus
+from app.database.base import get_db, get_vault_db
+from app.database.models import CardVault, Merchant, Payment, PaymentMethod, PaymentStatus
 from app.orchestrator.orchestrator import PaymentOrchestrator
 from app.orchestrator.processors.base import ProcessorPaymentRequest
 
@@ -26,6 +26,7 @@ class CreatePaymentRequest(BaseModel):
     payment_method_id: Annotated[int, Field(gt=0)]
     amount: Annotated[Decimal, Field(gt=0, max_digits=12, decimal_places=2)]
     currency: Annotated[str, Field(min_length=3, max_length=3)]
+    geography: Annotated[str, Field(min_length=2, max_length=10)]
 
     @field_validator("currency")
     @classmethod
@@ -35,6 +36,15 @@ class CreatePaymentRequest(BaseModel):
         if not currency.isalpha():
             raise ValueError("Currency must contain only letters")
         return currency
+
+    @field_validator("geography")
+    @classmethod
+    def validate_geography(cls, value: str) -> str:
+        """Normalize the country/region code used for capability matching."""
+        geography = value.upper()
+        if not geography.isalpha():
+            raise ValueError("Geography must contain only letters")
+        return geography
 
 
 class CreatePaymentResponse(BaseModel):
@@ -78,6 +88,7 @@ def build_payment_response(payment: Payment, message: str) -> CreatePaymentRespo
 
 @router.post(
     "/make-payment",
+    include_in_schema=False,
     response_model=CreatePaymentResponse,
     status_code=status.HTTP_201_CREATED,
 )
@@ -85,6 +96,7 @@ async def create_payment(
     payment_request: CreatePaymentRequest,
     current_user_id: Annotated[str, Depends(get_current_user_id)],
     db: Annotated[AsyncSession, Depends(get_db)],
+    vault_db: Annotated[AsyncSession, Depends(get_vault_db)],
     idempotency_key: Annotated[str, Header(min_length=1, max_length=100)],
 ) -> CreatePaymentResponse:
     """Create, route, process, normalize, and persist one payment attempt."""
@@ -147,20 +159,32 @@ async def create_payment(
     payment.payment_status = PaymentStatus.PROCESSING
     await db.commit()
 
-    processor_request = ProcessorPaymentRequest(
-        payment_id=payment.payment_id,
-        merchant_id=payment.merchant_id,
-        amount=payment.amount,
-        currency=payment.currency,
-        payment_token=payment_method.token,
-    )
-
     try:
-        processor_result = await payment_orchestrator.process_payment(processor_request)
+        # Read the saved card network by token; the encrypted PAN and CVV are
+        # never fetched or sent to a processor.
+        card = await vault_db.scalar(
+            select(CardVault).where(CardVault.token == payment_method.token),
+        )
+        if card is None:
+            raise LookupError("Card token is missing from the card vault.")
+
+        processor_request = ProcessorPaymentRequest(
+            payment_id=payment.payment_id,
+            merchant_id=payment.merchant_id,
+            amount=payment.amount,
+            currency=payment.currency,
+            card_network=card.card_brand.upper(),
+            geography=payment_request.geography,
+            payment_token=payment_method.token,
+        )
+        processor_result = await payment_orchestrator.process_payment(
+            processor_request,
+            db,
+        )
     except Exception:
         payment.payment_status = PaymentStatus.FAILED
-        payment.failure_code = "PROCESSOR_ERROR"
-        payment.failure_message = "The payment processor could not complete the payment."
+        payment.failure_code = "PAYMENT_CONTEXT_ERROR"
+        payment.failure_message = "Payment context could not be prepared."
         payment.provider = None
         payment.transaction_id = None
         message = "Payment failed."

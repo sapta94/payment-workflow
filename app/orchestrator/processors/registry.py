@@ -1,44 +1,15 @@
+"""Factory for the processor servers configured in PaymentProcessor."""
+
 from app.orchestrator.processors.base import PaymentProcessor
-from app.orchestrator.processors.processor_a import ProcessorA
-from app.orchestrator.processors.processor_b import ProcessorB
-from app.orchestrator.processors.processor_c import ProcessorC
+from app.orchestrator.processors.http_processor import HttpPaymentProcessor
 
 
 class ProcessorRegistry:
-    """
-    Central registry containing all available processors.
-    """
+    """Build an HTTP client for the selected processor server."""
 
-    def __init__(self):
-
-        self.processors: dict[
-            str,
-            PaymentProcessor
-        ] = {
-            "PROCESSOR_A": ProcessorA(),
-            "PROCESSOR_B": ProcessorB(),
-            "PROCESSOR_C": ProcessorC()
-        }
-
-    def get(
-        self,
-        processor_name: str,
-    ) -> PaymentProcessor:
-
-        processor = self.processors.get(
-            processor_name
+    def get(self, processor_code: str, base_url: str) -> PaymentProcessor:
+        """Return a client for ``POST {base_url}/process-payment``."""
+        return HttpPaymentProcessor(
+            processor_code=processor_code,
+            base_url=base_url,
         )
-
-        if processor is None:
-            raise ValueError(
-                f"Unknown processor: {processor_name}"
-            )
-
-        return processor
-
-    def all(self) -> dict[
-        str,
-        PaymentProcessor
-    ]:
-
-        return self.processors
