@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import get_current_user_id
 from app.database.base import get_db, get_vault_db
-from app.database.models import CardVault, Merchant, Payment, PaymentMethod, PaymentStatus
+from app.database.models import CardVault, Merchant, Payment, PaymentMethod, PaymentStatus, OutboxEvent
 from app.orchestrator.orchestrator import PaymentOrchestrator
 from app.orchestrator.processors.base import ProcessorPaymentRequest
 
@@ -201,6 +201,27 @@ async def create_payment(
             if processor_result.success
             else "Payment failed."
         )
+
+    outbox_event = OutboxEvent(
+    event_type="PAYMENT_STATUS_CHANGED",
+    aggregate_type="PAYMENT",
+    aggregate_id=payment.payment_id,
+    payload={
+        "payment_id": payment.payment_id,
+        "merchant_id": payment.merchant_id,
+        "user_id": payment.user_id,
+        "amount": str(payment.amount),
+        "currency": payment.currency,
+        "status": payment.payment_status.value,
+        "provider": payment.provider,
+        "transaction_id": payment.transaction_id,
+        "failure_code": payment.failure_code,
+        "failure_message": payment.failure_message,
+        }
+    )
+
+    db.add(outbox_event)
+   
 
     try:
         await db.commit()
