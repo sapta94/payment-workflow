@@ -1,8 +1,10 @@
 from datetime import datetime
 from decimal import Decimal
 from enum import Enum as pyenum
+import uuid
 
 from sqlalchemy import (
+    JSON,
     TIMESTAMP,
     BigInteger,
     Boolean,
@@ -284,4 +286,46 @@ class Payment(Base):
         nullable=False,
         server_default=text("CURRENT_TIMESTAMP"),
         server_onupdate=FetchedValue(),
+    )
+
+class OutboxEvent(Base):
+    __tablename__ = "outbox_events"
+
+    id: Mapped[int] = mapped_column(
+        Integer,
+        primary_key=True,
+        autoincrement=True,
+    )
+
+    event_id: Mapped[str] = mapped_column(
+        String(36),
+        unique=True,
+        nullable=False,
+        default=lambda: str(uuid.uuid4()),
+    )
+
+    event_type: Mapped[str] = mapped_column(
+        String(100),
+        nullable=False,
+    )
+
+    aggregate_type: Mapped[str] = mapped_column(
+        String(50),
+        nullable=False,
+    )
+
+    aggregate_id: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+    )
+
+    payload: Mapped[dict] = mapped_column(
+        JSON,
+        nullable=False,
+    )
+
+    created_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP,
+        nullable=False,
+        server_default=text("CURRENT_TIMESTAMP")
     )
