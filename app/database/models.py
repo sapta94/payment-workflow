@@ -309,6 +309,12 @@ class OutboxEvent(Base):
         nullable=False,
     )
 
+    event_version: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=1,
+    )
+
     aggregate_type: Mapped[str] = mapped_column(
         String(50),
         nullable=False,
@@ -319,13 +325,23 @@ class OutboxEvent(Base):
         nullable=False,
     )
 
+    source: Mapped[str] = mapped_column(
+        String(100),
+        nullable=False,
+    )
+
     payload: Mapped[dict] = mapped_column(
         JSON,
         nullable=False,
     )
 
+    occurred_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        nullable=False,
+    )
+
     created_at: Mapped[datetime] = mapped_column(
-        TIMESTAMP,
+        DateTime,
         nullable=False,
         server_default=text("CURRENT_TIMESTAMP")
     )
