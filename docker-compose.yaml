@@ -1,0 +1,214 @@
+services:
+
+  # ============================================================
+  # MAIN PAYMENT APPLICATION
+  # ============================================================
+
+  payment-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+
+    container_name: smartpay-api
+
+    ports:
+      - "8000:8000"
+
+    env_file:
+      - .env
+
+    environment:
+      # IMPORTANT:
+      # localhost inside the container means the container itself.
+      # Your MySQL is running on the Mac host.
+      DATABASE_URL: mysql+asyncmy://root:${MYSQL_PASSWORD}@host.docker.internal:3306/payment_workflow?charset=utf8mb4
+
+      VAULT_DATABASE_URL: mysql+asyncmy://root:${MYSQL_PASSWORD}@host.docker.internal:3306/payment_vault?charset=utf8mb4
+
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+    depends_on:
+      - kafka
+
+    networks:
+      - smartpay-network
+
+    restart: unless-stopped
+
+
+  # ============================================================
+  # PROCESSOR A
+  # ============================================================
+
+  processor_a:
+    build:
+      context: .
+      dockerfile: Dockerfile.processor
+
+    container_name: smartpay-processor-a
+
+    command:
+      [
+        "uvicorn",
+        "processor_servers.processor_a.main:app",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "8001"
+      ]
+
+    ports:
+      - "8001:8001"
+
+    networks:
+      - smartpay-network
+
+    restart: unless-stopped
+
+
+  # ============================================================
+  # PROCESSOR B
+  # ============================================================
+
+  processor_b:
+    build:
+      context: .
+      dockerfile: Dockerfile.processor
+
+    container_name: smartpay-processor-b
+
+    command:
+      [
+        "uvicorn",
+        "processor_servers.processor_b.main:app",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "8002"
+      ]
+
+    ports:
+      - "8002:8002"
+
+    networks:
+      - smartpay-network
+
+    restart: unless-stopped
+
+
+  # ============================================================
+  # PROCESSOR C
+  # ============================================================
+
+  processor_c:
+    build:
+      context: .
+      dockerfile: Dockerfile.processor
+
+    container_name: smartpay-processor-c
+
+    command:
+      [
+        "uvicorn",
+        "processor_servers.processor_c.main:app",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "8003"
+      ]
+
+    ports:
+      - "8003:8003"
+
+    networks:
+      - smartpay-network
+
+    restart: unless-stopped
+
+
+  # ============================================================
+  # KAFKA
+  # ============================================================
+
+  kafka:
+    image: apache/kafka:4.3.1
+
+    container_name: smartpay-kafka
+
+    ports:
+      - "9092:9092"
+
+    environment:
+
+      # -------------------------
+      # KRaft
+      # -------------------------
+
+      KAFKA_NODE_ID: 1
+
+      KAFKA_PROCESS_ROLES: broker,controller
+
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+
+
+      # -------------------------
+      # Listeners
+      # -------------------------
+
+      KAFKA_LISTENERS: PLAINTEXT://:29092,CONTROLLER://:9093,EXTERNAL://:9092
+
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,EXTERNAL://localhost:9092
+
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT,EXTERNAL:PLAINTEXT
+
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+
+
+      # -------------------------
+      # Single-node configuration
+      # -------------------------
+
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+
+
+      # -------------------------
+      # Development settings
+      # -------------------------
+
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+
+      KAFKA_LOG_RETENTION_HOURS: 168
+
+    volumes:
+      - kafka_data:/var/lib/kafka/data
+
+    networks:
+      - smartpay-network
+
+    restart: unless-stopped
+
+
+# ================================================================
+# NETWORK
+# ================================================================
+
+networks:
+  smartpay-network:
+    driver: bridge
+
+
+# ================================================================
+# VOLUMES
+# ================================================================
+
+volumes:
+  kafka_data:
