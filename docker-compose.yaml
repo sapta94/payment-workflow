@@ -21,9 +21,9 @@ services:
       # IMPORTANT:
       # localhost inside the container means the container itself.
       # Your MySQL is running on the Mac host.
-      DATABASE_URL: mysql+asyncmy://root:${MYSQL_PASSWORD}@host.docker.internal:3306/payment_workflow?charset=utf8mb4
+      DATABASE_URL: ${DATABASE_URL_DOCKER}
 
-      VAULT_DATABASE_URL: mysql+asyncmy://root:${MYSQL_PASSWORD}@host.docker.internal:3306/payment_vault?charset=utf8mb4
+      VAULT_DATABASE_URL: ${VAULT_DATABASE_URL_DOCKER}
 
     extra_hosts:
       - "host.docker.internal:host-gateway"
