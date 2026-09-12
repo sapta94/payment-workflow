@@ -345,3 +345,8 @@ class OutboxEvent(Base):
         nullable=False,
         server_default=text("CURRENT_TIMESTAMP")
     )
+    
+    published_at: Mapped[datetime | None] = mapped_column(
+    DateTime,
+    nullable=True
+)
