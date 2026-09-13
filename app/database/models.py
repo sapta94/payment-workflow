@@ -221,6 +221,10 @@ class Merchant(Base):
         server_default=text("CURRENT_TIMESTAMP"),
         server_onupdate=FetchedValue(),
     )
+    webhook_url: Mapped[str | None] = mapped_column(
+        String(500),
+        nullable=True,
+    )
 
 class MerchantBank(Base):
     """Bank details of a user with the MERCHANT account type."""
@@ -345,7 +349,7 @@ class OutboxEvent(Base):
         nullable=False,
         server_default=text("CURRENT_TIMESTAMP")
     )
-    
+
     published_at: Mapped[datetime | None] = mapped_column(
     DateTime,
     nullable=True
