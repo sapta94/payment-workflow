@@ -134,7 +134,7 @@ services:
 
     container_name: demo-merchant
 
-    working_dir: /merchant_server
+    working_dir: /merchant
 
     volumes:
       - ./merchant_server:/merchant
