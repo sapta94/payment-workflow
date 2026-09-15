@@ -255,6 +255,42 @@ services:
       - smartpay-network
 
     restart: unless-stopped
+  
+  # ============================================================
+  # OUTBOX PUBLISHER
+  # ============================================================
+
+  outbox-publisher:
+    build:
+      context: .
+      dockerfile: Dockerfile
+
+    container_name: smartpay-outbox-publisher
+
+    command:
+      [
+        "python",
+        "-m",
+        "app.messaging.outbox_publisher"
+      ]
+
+    env_file:
+      - .env
+
+    environment:
+      DATABASE_URL: ${DATABASE_URL_DOCKER}
+      VAULT_DATABASE_URL: ${VAULT_DATABASE_URL_DOCKER}
+
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+    depends_on:
+      - kafka
+
+    networks:
+      - smartpay-network
+
+    restart: unless-stopped
 # ================================================================
 # NETWORK
 # ================================================================
