@@ -223,7 +223,38 @@ services:
 
     restart: unless-stopped
 
+  webhook-consumer:
+    build:
+      context: .
+      dockerfile: Dockerfile
 
+    container_name: smartpay-webhook-consumer
+
+    command:
+      [
+        "python",
+        "-m",
+        "app.messaging.consumer_main"
+      ]
+
+    env_file:
+      - .env
+
+    environment:
+      DATABASE_URL: ${DATABASE_URL_DOCKER}
+      VAULT_DATABASE_URL: ${VAULT_DATABASE_URL_DOCKER}
+
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+    depends_on:
+      - kafka
+      - merchant-server
+
+    networks:
+      - smartpay-network
+
+    restart: unless-stopped
 # ================================================================
 # NETWORK
 # ================================================================
