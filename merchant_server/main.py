@@ -4,7 +4,7 @@ from decimal import Decimal
 
 
 app = FastAPI(
-    title="Processor A"
+    title="Merchant"
 )
 
 

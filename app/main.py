@@ -6,23 +6,17 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.router import api_router
 from app.core.config import get_settings
 from app.database.base import check_database_connection, close_database_connection
-from app.messaging.kafka_producer import KafkaProducer
 
 settings = get_settings()
 
-kafka_producer = KafkaProducer(
-    settings.kafka_bootstrap_servers
-)
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     """Manage resources that should start and stop with the application."""
     await check_database_connection()
-    await kafka_producer.start()
     try:
         yield
-        await kafka_producer.stop()
     finally:
         await close_database_connection()
 
