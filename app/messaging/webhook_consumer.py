@@ -34,22 +34,14 @@ class WebhookConsumer:
         await self.consumer.stop()
 
     async def run(self) -> None:
+        async for message in self.consumer:
+            event = json.loads(
+                message.value.decode("utf-8")
+            )
 
-        try:
+            await self.process_event(event)
 
-            async for message in self.consumer:
-
-                event = json.loads(
-                    message.value.decode("utf-8")
-                )
-
-                await self.process_event(event)
-
-                await self.consumer.commit()
-
-        finally:
-
-            await self.stop()
+            await self.consumer.commit()
 
     async def process_event(
         self,
@@ -82,7 +74,7 @@ class WebhookConsumer:
             "event_id": event["event_id"],
             "payment_id": payload["payment_id"],
             "merchant_id": payload["merchant_id"],
-            "order_status": payload["status"],
+            "payment_status": payload["status"],
         }
 
         await call_merchant_webhook(
