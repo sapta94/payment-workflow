@@ -271,7 +271,7 @@ services:
       [
         "python",
         "-m",
-        "app.messaging.outbox_publisher"
+        "app.messaging.publisher_main"
       ]
 
     env_file:
