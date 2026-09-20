@@ -52,6 +52,12 @@ class WebhookConsumer:
 
         merchant_id = payload["merchant_id"]
 
+        print(
+            f"Received Kafka event "
+            f"{event['event_id']} "
+            f"({event['event_type']})"
+        )
+
         async with AsyncSessionLocal() as db:
 
             merchant = await db.scalar(
@@ -77,7 +83,18 @@ class WebhookConsumer:
             "payment_status": payload["status"],
         }
 
+        print(
+            f"Sending webhook for payment "
+            f"{payload['payment_id']} "
+            f"to {merchant.webhook_url}"
+        )
+
         await call_merchant_webhook(
             webhook_url=merchant.webhook_url,
             payload=webhook_payload,
+        )
+
+        print(
+            f"Webhook delivered successfully "
+            f"for payment {payload['payment_id']}"
         )
