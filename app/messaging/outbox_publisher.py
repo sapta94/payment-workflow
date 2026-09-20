@@ -53,7 +53,7 @@ class OutboxPublisher:
             for event in events:
 
                 await self.kafka_producer.publish(
-                    topic=event.event_type,
+                    topic="payment-events",
                     key=event.event_id,
                     value={
                         "event_id": event.event_id,
@@ -65,6 +65,12 @@ class OutboxPublisher:
                         "occurred_at": event.occurred_at.isoformat(),
                         "payload": event.payload,
                     },
+                )
+
+                print(
+                    f"Published event {event.event_id} "
+                    f"({event.event_type}) "
+                    f"for payment {event.aggregate_id}"
                 )
 
                 event.published_at = datetime.utcnow()
