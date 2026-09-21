@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     access_token_expire_minutes: int = 30
     card_vault_encryption_key: str
     merchant_vault_encryption_key: str
+    kafka_bootstrap_servers: str
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 

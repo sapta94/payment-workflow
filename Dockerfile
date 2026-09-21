@@ -1,13 +1,18 @@
-FROM python:3.9-slim
+FROM python:3.11-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 
 WORKDIR /app
 
+# Install dependencies first for better Docker layer caching
 COPY pyproject.toml README.md ./
+
+RUN pip install --no-cache-dir --upgrade pip \
+    && pip install --no-cache-dir .
+
+# Copy application source
 COPY app ./app
-RUN pip install --no-cache-dir .
 
 EXPOSE 8000
 

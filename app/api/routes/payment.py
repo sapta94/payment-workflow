@@ -6,6 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
+from datetime import datetime
 
 from app.core.security import get_current_user_id
 from app.database.base import get_db, get_vault_db
@@ -83,6 +84,33 @@ def build_payment_response(payment: Payment, message: str) -> CreatePaymentRespo
         failure_code=payment.failure_code,
         failure_message=payment.failure_message,
         message=message,
+    )
+
+def build_payment_outbox_event(payment: Payment) -> OutboxEvent:
+    event_type = (
+        "payment.succeeded"
+        if payment.payment_status == PaymentStatus.SUCCESS
+        else "payment.failed"
+    )
+
+    return OutboxEvent(
+        event_type=event_type,
+        event_version=1,
+        aggregate_type="payment",
+        aggregate_id=payment.payment_id,
+        source="payment-service",
+        occurred_at=datetime.utcnow(),
+        payload={
+            "payment_id": payment.payment_id,
+            "merchant_id": payment.merchant_id,
+            "amount": str(payment.amount),
+            "currency": payment.currency,
+            "status": payment.payment_status.value,
+            "processor": payment.provider,
+            "transaction_id": payment.transaction_id,
+            "failure_code": payment.failure_code,
+            "failure_message": payment.failure_message,
+        },
     )
 
 
@@ -202,23 +230,7 @@ async def create_payment(
             else "Payment failed."
         )
 
-    outbox_event = OutboxEvent(
-    event_type="PAYMENT_STATUS_CHANGED",
-    aggregate_type="PAYMENT",
-    aggregate_id=payment.payment_id,
-    payload={
-        "payment_id": payment.payment_id,
-        "merchant_id": payment.merchant_id,
-        "user_id": payment.user_id,
-        "amount": str(payment.amount),
-        "currency": payment.currency,
-        "status": payment.payment_status.value,
-        "provider": payment.provider,
-        "transaction_id": payment.transaction_id,
-        "failure_code": payment.failure_code,
-        "failure_message": payment.failure_message,
-        }
-    )
+    outbox_event = build_payment_outbox_event(payment)
 
     db.add(outbox_event)
    

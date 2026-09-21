@@ -10,6 +10,7 @@ from app.database.base import check_database_connection, close_database_connecti
 settings = get_settings()
 
 
+
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     """Manage resources that should start and stop with the application."""
