@@ -5,6 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.router import api_router
 from app.core.config import get_settings
+from app.dashboard import dashboard_page
 from app.database.base import check_database_connection, close_database_connection
 
 settings = get_settings()
@@ -38,6 +39,12 @@ if settings.cors_origin_list:
     )
 
 app.include_router(api_router, prefix=settings.api_v1_prefix)
+
+
+@app.get("/dashboard", include_in_schema=False)
+async def dashboard():
+    """Serve the browser dashboard; its data API still requires a JWT."""
+    return dashboard_page()
 
 
 @app.get("/", include_in_schema=False)
