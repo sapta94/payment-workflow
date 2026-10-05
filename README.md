@@ -287,6 +287,7 @@ docker compose logs -f outbox-publisher
 |---|---|---|
 | Payment API | `http://localhost:8000` | Main payment API |
 | Swagger UI | `http://localhost:8000/docs` | API documentation |
+| Analytics Dashboard | `http://localhost:8000/dashboard` | Processor health, routing outcomes, and traffic charts |
 | Processor A | `http://localhost:8001` | Mock payment processor |
 | Processor B | `http://localhost:8002` | Mock payment processor |
 | Processor C | `http://localhost:8003` | Mock payment processor |
@@ -298,6 +299,36 @@ Inside Docker, application services communicate with Kafka using:
 ```text
 kafka:29092
 ```
+
+## Docker Processor URLs
+
+The payment API and dashboard run in the `payment-api` container. The
+dashboard checks each processor's `/health` endpoint, and the orchestrator
+calls `/process-payment`, using the `PaymentProcessor.base_url` values stored
+in MySQL.
+
+When Compose is running, `localhost` and `127.0.0.1` refer to the calling
+container, not another service. Configure processor URLs with Compose service
+names once for the Docker environment:
+
+```sql
+UPDATE PaymentProcessor
+SET base_url = CASE processor_code
+  WHEN 'PROCESSOR_A' THEN 'http://processor_a:8001'
+  WHEN 'PROCESSOR_B' THEN 'http://processor_b:8002'
+  WHEN 'PROCESSOR_C' THEN 'http://processor_c:8003'
+  ELSE base_url
+END;
+```
+
+Then start the stack:
+
+```bash
+docker compose up --build -d
+```
+
+Open `http://localhost:8000/dashboard` and paste a valid JWT access token.
+The dashboard API is protected at `/api/analytics/overview`.
 
 ---
 
