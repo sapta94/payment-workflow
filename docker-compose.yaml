@@ -1,7 +1,7 @@
 services:
 
   # ============================================================
-  # MAIN PAYMENT APPLICATION
+  # MAIN PAYMENT APPLICATION + ANALYTICS DASHBOARD
   # ============================================================
 
   payment-api:
@@ -12,6 +12,7 @@ services:
     container_name: smartpay-api
 
     ports:
+      # API, Swagger, and the dashboard are all served by this container.
       - "8000:8000"
 
     env_file:
@@ -29,7 +30,21 @@ services:
       - "host.docker.internal:host-gateway"
 
     depends_on:
-      - kafka
+      kafka:
+        condition: service_started
+      processor_a:
+        condition: service_healthy
+      processor_b:
+        condition: service_healthy
+      processor_c:
+        condition: service_healthy
+
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=2)"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
 
     networks:
       - smartpay-network
@@ -61,6 +76,12 @@ services:
     ports:
       - "8001:8001"
 
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8001/health', timeout=2)"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
     networks:
       - smartpay-network
 
@@ -91,6 +112,12 @@ services:
     ports:
       - "8002:8002"
 
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8002/health', timeout=2)"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
     networks:
       - smartpay-network
 
@@ -120,6 +147,12 @@ services:
 
     ports:
       - "8003:8003"
+
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8003/health', timeout=2)"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
 
     networks:
       - smartpay-network
