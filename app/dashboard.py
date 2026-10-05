@@ -4,13 +4,14 @@
 # document; its browser-oriented lines do not use Python's usual line length.
 # ruff: noqa: E501
 
+import json
+
 from fastapi.responses import HTMLResponse
 
 
-def dashboard_page() -> HTMLResponse:
+def dashboard_page(api_v1_prefix: str) -> HTMLResponse:
     """Return the dashboard shell; data is loaded from the protected API."""
-    return HTMLResponse(
-        """<!doctype html>
+    page = """<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
@@ -36,6 +37,7 @@ def dashboard_page() -> HTMLResponse:
   <section class="panel chart-panel"><h2>Payment Traffic</h2><canvas id="traffic" width="1160" height="330"></canvas><div class="legend" id="legend"></div></section>
 </main>
 <script>
+const apiPrefix=__API_PREFIX__;
 const colors=['#76a7ff','#25c281','#ffc857','#ee83e5','#ff8c69'];
 const token=document.querySelector('#token'), days=document.querySelector('#days'), notice=document.querySelector('#notice');
 token.value=sessionStorage.getItem('dashboard_token')||'';
@@ -56,7 +58,7 @@ function drawTraffic(points,codes){
   points.forEach((p,i)=>{if(i===0||i===points.length-1||points.length<=7){ctx.fillStyle='#9aa8b8';ctx.fillText(p.date.slice(5),x(i)-13,height-14)}});
   document.querySelector('#legend').innerHTML=series.map(s=>`<span><i class="dot" style="background:${s.color}"></i>${s.name}</span>`).join('');
 }
-async function load(){const accessToken=token.value.trim();if(!accessToken){notice.textContent='Enter a JWT access token to load analytics.';return}sessionStorage.setItem('dashboard_token',accessToken);notice.textContent='Loading…';try{const response=await fetch(`/api/analytics/overview?days=${days.value}`,{headers:{Authorization:`Bearer ${accessToken}`}});if(!response.ok)throw new Error(response.status===401?'Token is invalid or expired.':`Request failed (${response.status}).`);render(await response.json());notice.textContent='Live processor health is refreshed each time you load the dashboard.'}catch(error){notice.textContent=error.message}}
+async function load(){const accessToken=token.value.trim();if(!accessToken){notice.textContent='Enter a JWT access token to load analytics.';return}sessionStorage.setItem('dashboard_token',accessToken);notice.textContent='Loading…';try{const response=await fetch(`${apiPrefix}/analytics/overview?days=${days.value}`,{headers:{Authorization:`Bearer ${accessToken}`}});if(!response.ok)throw new Error(response.status===401?'Token is invalid or expired.':`Request failed (${response.status}).`);render(await response.json());notice.textContent='Live processor health is refreshed each time you load the dashboard.'}catch(error){notice.textContent=error.message}}
 document.querySelector('#refresh').addEventListener('click',load);days.addEventListener('change',load);if(token.value)load();
-</script></body></html>""",
-    )
+</script></body></html>"""
+    return HTMLResponse(page.replace("__API_PREFIX__", json.dumps(api_v1_prefix.rstrip("/"))))

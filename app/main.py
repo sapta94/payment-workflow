@@ -44,7 +44,7 @@ app.include_router(api_router, prefix=settings.api_v1_prefix)
 @app.get("/dashboard", include_in_schema=False)
 async def dashboard():
     """Serve the browser dashboard; its data API still requires a JWT."""
-    return dashboard_page()
+    return dashboard_page(settings.api_v1_prefix)
 
 
 @app.get("/", include_in_schema=False)
