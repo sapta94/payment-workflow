@@ -13,6 +13,7 @@ RUN pip install --no-cache-dir --upgrade pip \
 
 # Copy application source
 COPY app ./app
+COPY scripts ./scripts
 
 EXPOSE 8000
 
