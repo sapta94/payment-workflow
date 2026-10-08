@@ -324,6 +324,38 @@ services:
       - smartpay-network
 
     restart: unless-stopped
+
+  # ============================================================
+  # OPT-IN LOAD TEST RUNNER
+  # ============================================================
+  # Run explicitly with:
+  # docker compose --profile load-test run --rm load-tester --help
+  load-tester:
+    build:
+      context: .
+      dockerfile: Dockerfile
+
+    profiles: ["load-test"]
+
+    entrypoint: ["python", "scripts/load_test.py"]
+
+    env_file:
+      - .env
+
+    environment:
+      DATABASE_URL: ${DATABASE_URL_DOCKER}
+      LOAD_TEST_DATABASE_URL: ${DATABASE_URL_DOCKER}
+      LOAD_TEST_TARGET_URL: http://payment-api:8000/api/payment/make-payment
+
+    depends_on:
+      payment-api:
+        condition: service_healthy
+
+    volumes:
+      - ./reports:/app/reports
+
+    networks:
+      - smartpay-network
 # ================================================================
 # NETWORK
 # ================================================================
