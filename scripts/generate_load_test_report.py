@@ -2,7 +2,7 @@
 
 # The report is intentionally self-contained: its embedded HTML/CSS/JavaScript
 # uses browser-oriented line lengths rather than Python's usual line length.
-# ruff: noqa: E501
+# ruff: noqa: E501, I001
 
 import argparse
 import asyncio
