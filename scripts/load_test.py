@@ -111,6 +111,64 @@ class PhaseResult:
     completed_at: datetime
 
 
+def build_payment_payloads(arguments: argparse.Namespace) -> list[dict[str, object]]:
+    """Build valid, deterministic payment bodies for the chosen test profile.
+
+    ``capability-mix`` deliberately covers the active capability combinations:
+
+    - payment method 2: VISA
+    - payment method 3: MASTERCARD
+
+    The API derives the user from the shared JWT; user_id is never sent in a
+    body. All profiles use the same merchant supplied on the command line.
+    """
+    if arguments.request_profile == "single":
+        if arguments.payment_method_id is None:
+            raise ValueError("--payment-method-id is required for --request-profile single")
+        return [
+            {
+                "merchant_id": arguments.merchant_id,
+                "payment_method_id": arguments.payment_method_id,
+                "amount": arguments.amount,
+                "currency": arguments.currency.upper(),
+                "geography": arguments.geography.upper(),
+            },
+        ]
+
+    # Each of these matches a known active ProcessorCapability tuple. Amounts
+    # differ too, so load-test Payment rows represent realistic variation.
+    return [
+        {
+            "merchant_id": arguments.merchant_id,
+            "payment_method_id": 2,  # VISA / IN / INR -> processors A, B, C
+            "amount": "50000.00",
+            "currency": "INR",
+            "geography": "IN",
+        },
+        {
+            "merchant_id": arguments.merchant_id,
+            "payment_method_id": 3,  # MASTERCARD / IN / INR -> processors A, C
+            "amount": "25000.00",
+            "currency": "INR",
+            "geography": "IN",
+        },
+        {
+            "merchant_id": arguments.merchant_id,
+            "payment_method_id": 2,  # VISA / IN / USD -> processor A
+            "amount": "10000.00",
+            "currency": "USD",
+            "geography": "IN",
+        },
+        {
+            "merchant_id": arguments.merchant_id,
+            "payment_method_id": 2,  # VISA / US / USD -> processors B, C
+            "amount": "5000.00",
+            "currency": "USD",
+            "geography": "US",
+        },
+    ]
+
+
 def parse_rates(value: str) -> list[int]:
     """Parse comma-separated positive request rates."""
     try:
@@ -195,7 +253,7 @@ async def run_phase(
     client: httpx.AsyncClient,
     target_url: str,
     token: str,
-    payload: dict[str, object],
+    payloads: list[dict[str, object]],
     scenario_id: str,
     requested_rps: int,
     duration_seconds: int,
@@ -230,7 +288,9 @@ async def run_phase(
                     client=client,
                     target_url=target_url,
                     token=token,
-                    payload=payload,
+                    # Round-robin preserves an even capability distribution
+                    # at every load level without relying on random chance.
+                    payload=payloads[request_number % len(payloads)],
                     idempotency_key=idempotency_key,
                     phase_started_at=phase_started_at,
                 ),
@@ -346,7 +406,13 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--cooldown-seconds", type=int, default=5)
     parser.add_argument("--max-concurrency", type=int, default=2_000)
     parser.add_argument("--merchant-id", type=int, required=True)
-    parser.add_argument("--payment-method-id", type=int, required=True)
+    parser.add_argument(
+        "--request-profile",
+        choices=("capability-mix", "single"),
+        default="capability-mix",
+        help="Use all valid capability combinations, or one custom body",
+    )
+    parser.add_argument("--payment-method-id", type=int)
     parser.add_argument("--amount", default="1.00")
     parser.add_argument("--currency", default="INR")
     parser.add_argument("--geography", default="IN")
@@ -378,23 +444,20 @@ async def async_main(arguments: argparse.Namespace) -> int:
     if not arguments.confirm_load_test:
         raise ValueError("Pass --confirm-load-test to create real payment traffic")
 
+    payloads = build_payment_payloads(arguments)
     scenario_id = str(uuid.uuid4())
     print(
         f"Scenario {scenario_id}: {arguments.rates} RPS, "
         f"{arguments.duration_seconds}s per phase, target={arguments.target_url}",
     )
+    print("Request profiles (round-robin):")
+    for payload in payloads:
+        print(f"  {payload}")
     if arguments.dry_run:
         print("Dry run complete. No HTTP requests or database writes were made.")
         return 0
 
     engine = create_async_engine(database_url, pool_pre_ping=True)
-    payload = {
-        "merchant_id": arguments.merchant_id,
-        "payment_method_id": arguments.payment_method_id,
-        "amount": arguments.amount,
-        "currency": arguments.currency.upper(),
-        "geography": arguments.geography.upper(),
-    }
     try:
         await ensure_results_table(engine)
         limits = httpx.Limits(
@@ -410,7 +473,7 @@ async def async_main(arguments: argparse.Namespace) -> int:
                     client=client,
                     target_url=arguments.target_url,
                     token=token,
-                    payload=payload,
+                    payloads=payloads,
                     scenario_id=scenario_id,
                     requested_rps=requested_rps,
                     duration_seconds=arguments.duration_seconds,
