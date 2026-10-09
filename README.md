@@ -330,6 +330,68 @@ docker compose up --build -d
 Open `http://localhost:8000/dashboard` and paste a valid JWT access token.
 The dashboard API is protected at `/api/analytics/overview`.
 
+## Load Testing
+
+`scripts/load_test.py` is an opt-in load generator for the payment endpoint.
+It creates **real test Payment rows**, calls the configured processors, and
+creates `test_runs` automatically in the payment database. Do not point it at
+production or use real payment credentials.
+
+The script runs sequential rate phases (default: `100,500,1000` requests per
+second), stores aggregate latency and per-second measurements in `test_runs`,
+and uses unique idempotency keys for every request.
+
+Set a test user's access token without putting it on the command line:
+
+```bash
+export LOAD_TEST_ACCESS_TOKEN='your-test-jwt'
+export LOAD_TEST_DATABASE_URL="$DATABASE_URL"
+```
+
+First verify the configuration without making requests or database changes:
+
+```bash
+python scripts/load_test.py \
+  --merchant-id 1001 \
+  --payment-method-id 1 \
+  --confirm-load-test \
+  --dry-run
+```
+
+Run a real test (10 seconds at each requested rate):
+
+```bash
+python scripts/load_test.py \
+  --merchant-id 1001 \
+  --payment-method-id 1 \
+  --rates 100,500,1000 \
+  --duration-seconds 10 \
+  --confirm-load-test
+```
+
+The output prints the saved scenario ID. Generate a self-contained visual
+report (latency, throughput, errors, and per-second traffic) with:
+
+```bash
+python scripts/generate_load_test_report.py \
+  --scenario-id YOUR_SCENARIO_ID \
+  --output reports/load-test-report.html
+```
+
+For Docker Compose, the `load-tester` is an opt-in profile. Supply the token
+in `.env` as `LOAD_TEST_ACCESS_TOKEN`, then run:
+
+```bash
+docker compose --profile load-test run --rm load-tester \
+  --merchant-id 1001 \
+  --payment-method-id 1 \
+  --rates 100,500,1000 \
+  --duration-seconds 10 \
+  --confirm-load-test
+```
+
+Reports written by the Docker runner are saved under `./reports/` on the host.
+
 ---
 
 # Payment Flow
