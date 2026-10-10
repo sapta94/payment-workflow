@@ -1,50 +1,90 @@
+x-payment-api-common: &payment-api-common
+  build:
+    context: .
+    dockerfile: Dockerfile
+
+  env_file:
+    - .env
+
+  environment:
+    # localhost inside a container means that container. MySQL runs on the host.
+    DATABASE_URL: ${DATABASE_URL_DOCKER}
+    VAULT_DATABASE_URL: ${VAULT_DATABASE_URL_DOCKER}
+
+  extra_hosts:
+    - "host.docker.internal:host-gateway"
+
+  expose:
+    - "8000"
+
+  depends_on:
+    kafka:
+      condition: service_started
+    processor_a:
+      condition: service_healthy
+    processor_b:
+      condition: service_healthy
+    processor_c:
+      condition: service_healthy
+
+  healthcheck:
+    test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=2)"]
+    interval: 15s
+    timeout: 5s
+    retries: 5
+    start_period: 15s
+
+  networks:
+    - smartpay-network
+
+  restart: unless-stopped
+
 services:
 
   # ============================================================
-  # MAIN PAYMENT APPLICATION + ANALYTICS DASHBOARD
+  # PAYMENT API INSTANCES
+  # Nginx is the only public entry point and distributes requests across these.
   # ============================================================
+  payment-api-1:
+    <<: *payment-api-common
+    container_name: smartpay-api-1
 
-  payment-api:
+  payment-api-2:
+    <<: *payment-api-common
+    container_name: smartpay-api-2
+
+  payment-api-3:
+    <<: *payment-api-common
+    container_name: smartpay-api-3
+
+  # ============================================================
+  # PUBLIC NGINX REVERSE PROXY / ROUND-ROBIN LOAD BALANCER
+  # ============================================================
+  nginx:
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.nginx
 
-    container_name: smartpay-api
+    container_name: smartpay-nginx
 
     ports:
-      # API, Swagger, and the dashboard are all served by this container.
-      - "8000:8000"
-
-    env_file:
-      - .env
-
-    environment:
-      # IMPORTANT:
-      # localhost inside the container means the container itself.
-      # Your MySQL is running on the Mac host.
-      DATABASE_URL: ${DATABASE_URL_DOCKER}
-
-      VAULT_DATABASE_URL: ${VAULT_DATABASE_URL_DOCKER}
-
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+      # API, Swagger, and the dashboard remain available on this public port.
+      - "8000:80"
 
     depends_on:
-      kafka:
-        condition: service_started
-      processor_a:
+      payment-api-1:
         condition: service_healthy
-      processor_b:
+      payment-api-2:
         condition: service_healthy
-      processor_c:
+      payment-api-3:
         condition: service_healthy
 
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=2)"]
+      test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1/api/health >/dev/null || exit 1"]
       interval: 15s
       timeout: 5s
       retries: 5
-      start_period: 15s
+      start_period: 10s
 
     networks:
       - smartpay-network
@@ -345,10 +385,10 @@ services:
     environment:
       DATABASE_URL: ${DATABASE_URL_DOCKER}
       LOAD_TEST_DATABASE_URL: ${DATABASE_URL_DOCKER}
-      LOAD_TEST_TARGET_URL: http://payment-api:8000/api/payment/make-payment
+      LOAD_TEST_TARGET_URL: http://nginx/api/payment/make-payment
 
     depends_on:
-      payment-api:
+      nginx:
         condition: service_healthy
 
     volumes:
