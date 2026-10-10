@@ -1,0 +1,6 @@
+FROM nginx:1.27-alpine
+
+# The upstream configuration names the three internal FastAPI services.
+COPY nginx/default.conf /etc/nginx/conf.d/default.conf
+
+EXPOSE 80
