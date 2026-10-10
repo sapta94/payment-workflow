@@ -196,7 +196,7 @@ def percentile(values: list[float], percent: float) -> float:
 def is_safe_default_target(target_url: str) -> bool:
     """Allow local/Docker service targets without an extra override flag."""
     hostname = urlsplit(target_url).hostname
-    return hostname in {"localhost", "127.0.0.1", "::1", "payment-api"}
+    return hostname in {"localhost", "127.0.0.1", "::1", "payment-api", "nginx"}
 
 
 async def send_payment(

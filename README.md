@@ -248,7 +248,10 @@ docker compose ps
 The main services should be running:
 
 ```text
-payment-api
+nginx
+payment-api-1
+payment-api-2
+payment-api-3
 processor_a
 processor_b
 processor_c
@@ -267,7 +270,8 @@ docker compose logs <service-name>
 Examples:
 
 ```bash
-docker compose logs payment-api
+docker compose logs nginx
+docker compose logs payment-api-1
 docker compose logs kafka
 docker compose logs outbox-publisher
 docker compose logs webhook-consumer
@@ -285,7 +289,8 @@ docker compose logs -f outbox-publisher
 
 | Service | URL / Port | Purpose |
 |---|---|---|
-| Payment API | `http://localhost:8000` | Main payment API |
+| Nginx reverse proxy | `http://localhost:8000` | Public entry point; round-robins requests to three API instances |
+| Payment API | `http://localhost:8000` | Main payment API, served through Nginx |
 | Swagger UI | `http://localhost:8000/docs` | API documentation |
 | Analytics Dashboard | `http://localhost:8000/dashboard` | Processor health, routing outcomes, and traffic charts |
 | Processor A | `http://localhost:8001` | Mock payment processor |
@@ -302,10 +307,17 @@ kafka:29092
 
 ## Docker Processor URLs
 
-The payment API and dashboard run in the `payment-api` container. The
-dashboard checks each processor's `/health` endpoint, and the orchestrator
-calls `/process-payment`, using the `PaymentProcessor.base_url` values stored
-in MySQL.
+Three `payment-api` containers (`payment-api-1`, `payment-api-2`, and
+`payment-api-3`) run the same Uvicorn/FastAPI application. Nginx is the only
+public container and uses its default round-robin upstream policy to select an
+API instance for each request. The dashboard checks each processor's `/health`
+endpoint, and the orchestrator calls `/process-payment`, using the
+`PaymentProcessor.base_url` values stored in MySQL.
+
+Nginx deliberately does not retry a failed request on another API instance.
+This is important for payment `POST` requests: replaying a request after an
+uncertain backend failure could otherwise produce a duplicate attempt. The
+payment endpoint's idempotency key remains the application-level safeguard.
 
 When Compose is running, `localhost` and `127.0.0.1` refer to the calling
 container, not another service. Configure processor URLs with Compose service
@@ -352,8 +364,7 @@ First verify the configuration without making requests or database changes:
 
 ```bash
 python scripts/load_test.py \
-  --merchant-id 1001 \
-  --payment-method-id 1 \
+  --merchant-id 3 \
   --confirm-load-test \
   --dry-run
 ```
@@ -362,12 +373,26 @@ Run a real test (10 seconds at each requested rate):
 
 ```bash
 python scripts/load_test.py \
-  --merchant-id 1001 \
-  --payment-method-id 1 \
-  --rates 100,500,1000 \
-  --duration-seconds 10 \
+  --merchant-id 3 \
+  --rates 100,200 \
+  --duration-seconds 1 \
   --confirm-load-test
 ```
+
+The default `capability-mix` rotates through these valid request bodies while
+keeping the same JWT user and merchant ID:
+
+| Payment method | Card network | Amount | Geography | Currency | Eligible processors |
+|---|---|---:|---|---|---|
+| `2` | VISA | `50000.00` | `IN` | `INR` | A, B, C |
+| `3` | MASTERCARD | `25000.00` | `IN` | `INR` | A, C |
+| `2` | VISA | `10000.00` | `IN` | `USD` | A |
+| `2` | VISA | `5000.00` | `US` | `USD` | B, C |
+
+For 100 requests followed by 200 requests, keep
+`--rates 100,200 --duration-seconds 1` as shown above. The script assigns each
+body in round-robin order, giving 25 requests to each profile in the 100-RPS
+phase and 50 to each profile in the 200-RPS phase.
 
 The output prints the saved scenario ID. Generate a self-contained visual
 report (latency, throughput, errors, and per-second traffic) with:
@@ -383,10 +408,9 @@ in `.env` as `LOAD_TEST_ACCESS_TOKEN`, then run:
 
 ```bash
 docker compose --profile load-test run --rm load-tester \
-  --merchant-id 1001 \
-  --payment-method-id 1 \
-  --rates 100,500,1000 \
-  --duration-seconds 10 \
+  --merchant-id 3 \
+  --rates 100,200 \
+  --duration-seconds 1 \
   --confirm-load-test
 ```
 
@@ -699,11 +723,11 @@ docker compose down -v
 # Rebuilding After Code Changes
 
 If the application code has changed and the Dockerfile copies the source into
-the image, rebuild the affected service:
+the image, rebuild the API instances and restart Nginx:
 
 ```bash
-docker compose build payment-api
-docker compose up -d payment-api
+docker compose build payment-api-1 payment-api-2 payment-api-3 nginx
+docker compose up -d payment-api-1 payment-api-2 payment-api-3 nginx
 ```
 
 For messaging changes:
